@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RA2 File Reader</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Red Alert 2 File Reader</h1>
+        <p>Inspect RA2 game folders, INI files, and unit data without manual digging.</p>
+      </header>
+
+      <section class="panel">
+        <label for="rootPath">Game folder path</label>
+        <div class="stack">
+          <input id="rootPath" type="text" placeholder="Example: C:/Games/Red Alert 2" />
+          <button id="scanBtn">Scan folder</button>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="summaryPanel">
+        <h2>Summary</h2>
+        <div id="summary"></div>
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <input id="searchInput" type="text" placeholder="Search file names or INI contents" />
+          <button id="searchBtn">Search</button>
+        </div>
+        <div id="searchResults" class="results"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Files</h2>
+        <div id="fileList" class="file-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>INI Preview</h2>
+        <div id="iniPreview" class="ini-preview"></div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

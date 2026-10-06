@@ -1,0 +1,186 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+function walkDirectory(rootPath) {
+  if (!fs.existsSync(rootPath) || !fs.statSync(rootPath).isDirectory()) {
+    throw new Error(`Directory not found: ${rootPath}`);
+  }
+
+  const results = [];
+
+  function visit(currentPath) {
+    const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentPath, entry.name);
+      if (entry.isDirectory()) {
+        visit(fullPath);
+      } else {
+        results.push(fullPath);
+      }
+    }
+  }
+
+  visit(rootPath);
+  return results;
+}
+
+function summarizeExtensions(filePaths) {
+  const summary = {};
+
+  for (const filePath of filePaths) {
+    const ext = path.extname(filePath) || '(no extension)';
+    summary[ext] = (summary[ext] || 0) + 1;
+  }
+
+  return summary;
+}
+
+function parseIni(filePath) {
+  const content = fs.readFileSync(filePath, 'utf8');
+  const lines = content.split(/\r?\n/);
+  const sections = [];
+  let currentSection = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith(';') || line.startsWith('#')) {
+      continue;
+    }
+
+    if (/^\[[^\]]+\]$/.test(line)) {
+      currentSection = {
+        name: line.slice(1, -1).trim(),
+        entries: []
+      };
+      sections.push(currentSection);
+      continue;
+    }
+
+    if (!currentSection) continue;
+
+    const equalsIndex = line.indexOf('=');
+    if (equalsIndex <= 0) continue;
+
+    const key = line.slice(0, equalsIndex).trim();
+    const value = line.slice(equalsIndex + 1).trim();
+    if (!key) continue;
+
+    currentSection.entries.push({ key, value });
+  }
+
+  return sections;
+}
+
+function searchFiles(rootPath, searchTerm) {
+  const files = walkDirectory(rootPath);
+  const needle = searchTerm.trim().toLowerCase();
+  const matches = [];
+
+  for (const filePath of files) {
+    const fileName = path.basename(filePath).toLowerCase();
+    if (fileName.includes(needle)) {
+      matches.push(filePath);
+      continue;
+    }
+
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.ini') {
+      const text = fs.readFileSync(filePath, 'utf8').toLowerCase();
+      if (text.includes(needle)) {
+        matches.push(filePath);
+      }
+    }
+  }
+
+  return matches;
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, app: 'ra2-file-reader-web' });
+});
+
+app.get('/api/scan', (req, res) => {
+  const root = req.query.root;
+  if (!root || typeof root !== 'string') {
+    return res.status(400).json({ error: 'Missing root query parameter.' });
+  }
+
+  try {
+    const files = walkDirectory(root);
+    const summary = summarizeExtensions(files);
+    const fileList = files.map((file) => ({
+      path: file,
+      extension: path.extname(file) || '(no extension)',
+      name: path.basename(file)
+    }));
+
+    res.json({
+      root,
+      totalFiles: files.length,
+      summary,
+      files: fileList
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/read-ini', (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath || typeof filePath !== 'string') {
+    return res.status(400).json({ error: 'Missing path query parameter.' });
+  }
+
+  try {
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    const sections = parseIni(filePath);
+    res.json({
+      file: filePath,
+      sections
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/search', (req, res) => {
+  const root = req.query.root;
+  const term = req.query.term;
+
+  if (!root || typeof root !== 'string') {
+    return res.status(400).json({ error: 'Missing root query parameter.' });
+  }
+
+  if (!term || typeof term !== 'string') {
+    return res.status(400).json({ error: 'Missing term query parameter.' });
+  }
+
+  try {
+    const matches = searchFiles(root, term);
+    res.json({
+      root,
+      term,
+      matches
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`RA2 file reader website running on http://localhost:${PORT}`);
+});

@@ -1,0 +1,164 @@
+const rootInput = document.getElementById('rootPath');
+const scanBtn = document.getElementById('scanBtn');
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
+const summaryPanel = document.getElementById('summaryPanel');
+const summary = document.getElementById('summary');
+const fileList = document.getElementById('fileList');
+const searchResults = document.getElementById('searchResults');
+const iniPreview = document.getElementById('iniPreview');
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Request failed');
+  }
+  return data;
+}
+
+function renderSummary(data) {
+  const entries = Object.entries(data.summary || {});
+  const html = `
+    <div class="summary-grid">
+      <div class="summary-badge">Total files: ${data.totalFiles}</div>
+      ${entries
+        .slice(0, 10)
+        .map(([ext, count]) => `<div class="summary-badge">${ext}: ${count}</div>`)
+        .join('')}
+    </div>
+  `;
+  summary.innerHTML = html;
+  summaryPanel.classList.remove('hidden');
+}
+
+function renderFiles(files) {
+  if (!files.length) {
+    fileList.innerHTML = '<div class="file-item">No files found.</div>';
+    return;
+  }
+
+  fileList.innerHTML = files
+    .slice(0, 200)
+    .map(
+      (file) => `
+        <div class="file-item" data-path="${escapeHtml(file.path)}" title="${escapeHtml(file.path)}">
+          ${escapeHtml(file.name)}
+          <small>(${escapeHtml(file.extension)})</small>
+        </div>
+      `
+    )
+    .join('');
+
+  fileList.querySelectorAll('.file-item').forEach((item) => {
+    item.addEventListener('click', async () => {
+      const filePath = item.getAttribute('data-path');
+      if (!filePath) return;
+      await loadIni(filePath);
+    });
+  });
+}
+
+function renderSearchResults(matches) {
+  if (!matches.length) {
+    searchResults.innerHTML = '<div class="result-item">No matches found.</div>';
+    return;
+  }
+
+  searchResults.innerHTML = matches
+    .slice(0, 50)
+    .map(
+      (match) => `
+        <div class="result-item" data-path="${escapeHtml(match)}">${escapeHtml(match)}</div>
+      `
+    )
+    .join('');
+
+  searchResults.querySelectorAll('.result-item').forEach((item) => {
+    item.addEventListener('click', async () => {
+      const filePath = item.getAttribute('data-path');
+      if (!filePath) return;
+      await loadIni(filePath);
+    });
+  });
+}
+
+async function loadIni(filePath) {
+  try {
+    const data = await fetchJson(`/api/read-ini?path=${encodeURIComponent(filePath)}`);
+    if (!data.sections.length) {
+      iniPreview.innerHTML = '<div class="section-box">No INI sections found.</div>';
+      return;
+    }
+
+    iniPreview.innerHTML = data.sections
+      .map(
+        (section) => `
+          <div class="section-box">
+            <h3>[${escapeHtml(section.name)}]</h3>
+            ${section.entries.length ? section.entries.map((entry) => `
+              <div class="entry-row">
+                <span class="key">${escapeHtml(entry.key)}</span>
+                <span class="value">= ${escapeHtml(entry.value)}</span>
+              </div>
+            `).join('') : '<div>No entries.</div>'}
+          </div>
+        `
+      )
+      .join('');
+  } catch (err) {
+    iniPreview.innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function scanFolder() {
+  const root = rootInput.value.trim();
+  if (!root) {
+    alert('Please enter a folder path.');
+    return;
+  }
+
+  try {
+    const data = await fetchJson(`/api/scan?root=${encodeURIComponent(root)}`);
+    renderSummary(data);
+    renderFiles(data.files);
+  } catch (err) {
+    summary.innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+    summaryPanel.classList.remove('hidden');
+    fileList.innerHTML = '';
+  }
+}
+
+async function searchFiles() {
+  const root = rootInput.value.trim();
+  const term = searchInput.value.trim();
+  if (!root || !term) {
+    alert('Please enter both a folder path and a search term.');
+    return;
+  }
+
+  try {
+    const data = await fetchJson(`/api/search?root=${encodeURIComponent(root)}&term=${encodeURIComponent(term)}`);
+    renderSearchResults(data.matches);
+  } catch (err) {
+    searchResults.innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+scanBtn.addEventListener('click', scanFolder);
+searchBtn.addEventListener('click', searchFiles);
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const defaultPath = 'C:/Games/Red Alert 2';
+  rootInput.value = defaultPath;
+  scanFolder();
+});

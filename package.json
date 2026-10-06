@@ -1,0 +1,13 @@
+{
+  "name": "ra2-file-reader-web",
+  "version": "1.0.0",
+  "description": "Website for browsing and inspecting Red Alert 2 game files and INI data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
